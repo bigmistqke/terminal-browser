@@ -22,8 +22,10 @@ function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // EPERM is a process we may not signal, not a process that is gone. A
+    // caller inside a sandbox gets it for everything outside that sandbox.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
