@@ -114,6 +114,17 @@ function browserLaunchCommand(argv: string[]): { command: string[]; cwd: string 
   if (process.platform === "linux" && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
     argv = [...argv, "--ozone-platform=headless", "--screen-info={8192x8192}"];
   }
+  // Chromium cannot start its own sandbox inside another sandbox, and on macOS
+  // the gpu process has a second one that --no-sandbox leaves alone.
+  const asked =
+    process.env.TERMINAL_BROWSER_NO_SANDBOX ||
+    argv.includes("--no-sandbox") ||
+    process.argv.includes("--no-sandbox");
+  if (asked) {
+    const flags = argv.includes("--no-sandbox") ? [] : ["--no-sandbox"];
+    if (process.platform === "darwin") flags.push("--disable-gpu-sandbox");
+    argv = [...argv, ...flags];
+  }
   ensureDataDir();
   const logDir = LOGS_DIR;
   fs.mkdirSync(logDir, { recursive: true });
@@ -475,6 +486,7 @@ async function requireGraphics(check: TerminalCheck) {
 
 const BROWSER_FLAGS = [
   "--allow-clipboard-read",
+  "--no-sandbox",
   "--transparent",
   "--ssh=",
   "--split-dir=",
@@ -598,6 +610,9 @@ async function openCommand(args: string[]) {
   }
   const tty = own ?? caller?.path ?? null;
   const argv = args.map((arg) => (arg === url && fs.existsSync(arg) ? path.resolve(arg) : arg));
+  if (process.env.TERMINAL_BROWSER_NO_SANDBOX && !argv.includes("--no-sandbox")) {
+    argv.push("--no-sandbox");
+  }
   argv.push(`--split-dir=${direction}`);
   if (tty) argv.push(`--parent-tty=${tty}`);
   print(await launchInSplit(terminal!, direction, argv, size));
